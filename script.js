@@ -1,6 +1,12 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // مسیر status.json را نسبی قرار می‌دهیم
     fetch('status.json')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('خطا در دریافت فایل وضعیت');
+            }
+            return response.json();
+        })
         .then(data => {
             updateStatus(data);
         })

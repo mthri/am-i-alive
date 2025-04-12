@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: '0 0 * * *'  # اجرا هر روز در نیمه شب
 
+permissions:
+  contents: write
+  issues: write
+  pages: write
+
 jobs:
   check-alive:
     runs-on: ubuntu-latest
@@ -13,20 +18,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
+      - name: Close issue if owner created it
+        if: github.event_name == 'issues' && github.event.issue.user.login == github.repository_owner
+        run: |
+          # بستن ایشو ایجاد شده
+          curl -X PATCH \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}" \
+            -d '{"state":"closed", "labels": ["life-proof"]}'
+          
+          echo "Life status updated - issue closed automatically"
+        
       - name: Check for activity
         id: activity-check
         run: |
           # زمان آخرین ایشو را بررسی می‌کنیم
           CURRENT_TIMESTAMP=$(date +%s)
           
-          # دریافت زمان آخرین ایشو
+          # دریافت زمان آخرین ایشو از صاحب ریپازیتوری
           LATEST_ISSUE_TIME=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                              "https://api.github.com/repos/${{ github.repository }}/issues?state=all&sort=created&direction=desc&per_page=1" | \
+                              "https://api.github.com/repos/${{ github.repository }}/issues?state=all&creator=${{ github.repository_owner }}&sort=created&direction=desc&per_page=1" | \
                               jq -r '.[0].created_at // empty')
           
           if [ -z "$LATEST_ISSUE_TIME" ]; then
@@ -47,14 +59,22 @@ jobs:
             echo "LAST_ACTIVITY=${LATEST_ISSUE_TIME}" >> $GITHUB_ENV
           fi
 
+      - name: Create status directory
+        run: mkdir -p public
+
       - name: Update status file
         run: |
-          echo "{\"status\": \"${{ env.STATUS }}\", \"lastActivity\": \"${{ env.LAST_ACTIVITY }}\", \"lastChecked\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > status.json
+          echo "{\"status\": \"${{ env.STATUS }}\", \"lastActivity\": \"${{ env.LAST_ACTIVITY }}\", \"lastChecked\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > public/status.json
+          
+          # کپی فایل‌های اصلی به پوشه public
+          cp index.html public/
+          cp script.js public/
+          cp style.css public/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
-          destination_dir: .
-          keep_files: true
+          publish_dir: ./public
+          enable_jekyll: false
+          force_orphan: true
