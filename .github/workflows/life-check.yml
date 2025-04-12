@@ -1,0 +1,60 @@
+name: Life Check
+
+on:
+  issues:
+    types: [opened]
+  schedule:
+    - cron: '0 0 * * *'  # اجرا هر روز در نیمه شب
+
+jobs:
+  check-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Check for activity
+        id: activity-check
+        run: |
+          # زمان آخرین ایشو را بررسی می‌کنیم
+          CURRENT_TIMESTAMP=$(date +%s)
+          
+          # دریافت زمان آخرین ایشو
+          LATEST_ISSUE_TIME=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                              "https://api.github.com/repos/${{ github.repository }}/issues?state=all&sort=created&direction=desc&per_page=1" | \
+                              jq -r '.[0].created_at // empty')
+          
+          if [ -z "$LATEST_ISSUE_TIME" ]; then
+            # اگر هیچ ایشویی وجود نداشت
+            echo "STATUS=unknown" >> $GITHUB_ENV
+            echo "LAST_ACTIVITY=none" >> $GITHUB_ENV
+          else
+            ISSUE_TIMESTAMP=$(date -d "$LATEST_ISSUE_TIME" +%s)
+            DIFF_SECONDS=$((CURRENT_TIMESTAMP - ISSUE_TIMESTAMP))
+            DIFF_DAYS=$((DIFF_SECONDS / 86400))
+            
+            if [ $DIFF_DAYS -gt 30 ]; then
+              echo "STATUS=presumed-dead" >> $GITHUB_ENV
+            else
+              echo "STATUS=alive" >> $GITHUB_ENV
+            fi
+            
+            echo "LAST_ACTIVITY=${LATEST_ISSUE_TIME}" >> $GITHUB_ENV
+          fi
+
+      - name: Update status file
+        run: |
+          echo "{\"status\": \"${{ env.STATUS }}\", \"lastActivity\": \"${{ env.LAST_ACTIVITY }}\", \"lastChecked\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > status.json
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          destination_dir: .
+          keep_files: true
