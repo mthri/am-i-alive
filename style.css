@@ -79,6 +79,21 @@ h2 {
     margin-bottom: 0.5rem;
 }
 
+.days-info {
+    font-size: 0.9rem;
+    display: inline-block;
+}
+
+.days-info.warning {
+    color: #f39c12;
+    font-weight: bold;
+}
+
+.days-info.danger {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
 .explanation {
     border-top: 1px solid #eee;
     padding-top: 1.5rem;

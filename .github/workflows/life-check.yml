@@ -45,10 +45,13 @@ jobs:
             # اگر هیچ ایشویی وجود نداشت
             echo "STATUS=unknown" >> $GITHUB_ENV
             echo "LAST_ACTIVITY=none" >> $GITHUB_ENV
+            echo "DAYS_SINCE_ACTIVITY=999" >> $GITHUB_ENV
           else
             ISSUE_TIMESTAMP=$(date -d "$LATEST_ISSUE_TIME" +%s)
             DIFF_SECONDS=$((CURRENT_TIMESTAMP - ISSUE_TIMESTAMP))
             DIFF_DAYS=$((DIFF_SECONDS / 86400))
+            
+            echo "DAYS_SINCE_ACTIVITY=$DIFF_DAYS" >> $GITHUB_ENV
             
             if [ $DIFF_DAYS -gt 30 ]; then
               echo "STATUS=presumed-dead" >> $GITHUB_ENV
@@ -59,12 +62,39 @@ jobs:
             echo "LAST_ACTIVITY=${LATEST_ISSUE_TIME}" >> $GITHUB_ENV
           fi
 
+      - name: Create warning issue if needed
+        if: env.DAYS_SINCE_ACTIVITY >= 20 && env.DAYS_SINCE_ACTIVITY <= 30
+        run: |
+          # بررسی آیا قبلاً ایشوی هشدار ایجاد شده است
+          WARNING_ISSUES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                           "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=warning&per_page=1")
+          
+          if [[ $(echo "$WARNING_ISSUES" | jq length) -eq 0 ]]; then
+            # مانده روزها تا تغییر وضعیت
+            DAYS_LEFT=$((30 - ${{ env.DAYS_SINCE_ACTIVITY }}))
+            
+            # ایجاد ایشوی هشدار
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues" \
+              -d "{
+                \"title\": \"⚠️ هشدار: نزدیک به تغییر وضعیت به فوت شده\",
+                \"body\": \"@${{ github.repository_owner }} توجه! حدود ${{ env.DAYS_SINCE_ACTIVITY }} روز از آخرین فعالیت شما می‌گذرد. اگر تا $DAYS_LEFT روز دیگر یک ایشو جدید ایجاد نکنید، وضعیت شما به \\\"احتمالاً فوت شده\\\" تغییر خواهد کرد. لطفاً برای اثبات حیات، یک ایشو جدید ایجاد کنید.\",
+                \"labels\": [\"warning\"]
+              }"
+            
+            echo "Warning issue created"
+          else
+            echo "Warning issue already exists"
+          fi
+
       - name: Create status directory
         run: mkdir -p public
 
       - name: Update status file
         run: |
-          echo "{\"status\": \"${{ env.STATUS }}\", \"lastActivity\": \"${{ env.LAST_ACTIVITY }}\", \"lastChecked\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > public/status.json
+          echo "{\"status\": \"${{ env.STATUS }}\", \"lastActivity\": \"${{ env.LAST_ACTIVITY }}\", \"lastChecked\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\", \"daysSinceActivity\": ${{ env.DAYS_SINCE_ACTIVITY }}}" > public/status.json
           
           # کپی فایل‌های اصلی به پوشه public
           cp index.html public/

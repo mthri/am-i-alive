@@ -47,6 +47,21 @@ function updateStatus(data) {
             hour: '2-digit',
             minute: '2-digit'
         }).format(date);
+        
+        // نمایش تعداد روزهای گذشته
+        if (data.daysSinceActivity !== undefined) {
+            const daysInfo = document.createElement('span');
+            daysInfo.className = 'days-info';
+            daysInfo.textContent = ` (${data.daysSinceActivity} روز پیش)`;
+            
+            if (data.daysSinceActivity >= 20 && data.daysSinceActivity < 30) {
+                daysInfo.className += ' warning';
+            } else if (data.daysSinceActivity >= 30) {
+                daysInfo.className += ' danger';
+            }
+            
+            lastActivity.appendChild(daysInfo);
+        }
     } else {
         lastActivity.textContent = 'هیچ فعالیتی ثبت نشده است';
     }
